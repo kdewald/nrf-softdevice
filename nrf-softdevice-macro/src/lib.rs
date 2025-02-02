@@ -684,6 +684,15 @@ pub fn gatt_client(args: TokenStream, item: TokenStream) -> TokenStream {
                     return Err(#ble::gatt_client::DiscoverError::ServiceIncomplete);
                 }
             ));
+
+            // Add CCCD read functions
+            code_impl.extend(quote_spanned!(ch.span=>
+                #fn_vis async fn get_cccd(&self) -> Result<u16, #ble::gatt_client::ReadError> {
+                    let mut buf = [0; 2];
+                    let _len = #ble::gatt_client::read(&self.conn, self.#cccd_handle, &mut buf).await?;
+                    Ok(u16::from_le_bytes(buf))
+                }
+            ));
         }
 
         if notify {
@@ -698,6 +707,13 @@ pub fn gatt_client(args: TokenStream, item: TokenStream) -> TokenStream {
                     } else {
                         return Some(#event_enum_name::#case_notification(#ty_as_val::from_gatt(data)));
                     }
+                }
+            ));
+
+            let is_notifying_fn = format_ident!("{}_is_notifying", ch.name);
+            code_impl.extend(quote_spanned!(ch.span=>
+                #fn_vis async fn #is_notifying_fn(&self) -> Result<bool, #ble::gatt_client::ReadError> {
+                    Ok((self.get_cccd().await? & 0x01) != 0)
                 }
             ));
 
@@ -722,6 +738,13 @@ pub fn gatt_client(args: TokenStream, item: TokenStream) -> TokenStream {
                     } else {
                         return Some(#event_enum_name::#case_indication(#ty_as_val::from_gatt(data)));
                     }
+                }
+            ));
+
+            let is_indicating_fn = format_ident!("{}_is_indicating", ch.name);
+            code_impl.extend(quote_spanned!(ch.span=>
+                #fn_vis async fn #is_indicating_fn(&self) -> Result<bool, #ble::gatt_client::ReadError> {
+                    Ok((self.get_cccd().await? & 0x02) != 0)
                 }
             ));
 
