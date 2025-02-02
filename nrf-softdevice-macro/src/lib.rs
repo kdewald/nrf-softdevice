@@ -345,6 +345,14 @@ pub fn gatt_service(args: TokenStream, item: TokenStream) -> TokenStream {
             code_struct_init.extend(quote_spanned!(ch.span=>
                 #cccd_handle: #char_name.cccd_handle,
             ));
+            code_impl.extend(quote_spanned!(ch.span=>
+                #fn_vis fn get_cccd(&self) -> Result<u16, #ble::gatt_server::GetValueError> {
+                    let sd = unsafe { ::nrf_softdevice::Softdevice::steal() };
+                    let buf = &mut [0u8; 2];
+                    let size = #ble::gatt_server::get_value(sd, self.#cccd_handle, buf)?;
+                    Ok(u16::from_le_bytes(buf[..size].try_into().unwrap_or([0, 0])))
+                }
+            ));
         }
 
         if write || write_without_response {
@@ -391,6 +399,13 @@ pub fn gatt_service(args: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 ));
             }
+
+            let is_notifying_fn = format_ident!("{}_is_notifying", ch.name);
+            code_impl.extend(quote_spanned!(ch.span=>
+                #fn_vis fn #is_notifying_fn(&self) -> Result<bool, #ble::gatt_server::GetValueError> {
+                    Ok((self.get_cccd()? & 0x01) != 0)
+                }
+            ));
         }
 
         if indicate {
@@ -421,6 +436,13 @@ pub fn gatt_service(args: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 ));
             }
+
+            let is_indicating_fn = format_ident!("{}_is_indicating", ch.name);
+            code_impl.extend(quote_spanned!(ch.span=>
+                #fn_vis fn #is_indicating_fn(&self) -> Result<bool, #ble::gatt_server::GetValueError> {
+                    Ok((self.get_cccd()? & 0x02) != 0)
+                }
+            ));
         }
 
         if indicate && notify {
